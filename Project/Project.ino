@@ -135,6 +135,11 @@ void loop() {
         closeBlinds();
         Serial.println("Temperature above 80°F, closing blinds");
         }
+        //closing blinds if clear light is above 800 
+        if(c > 800){
+          closeBlinds();
+          Serial.println("Too bright outside, closing blinds");
+        }
         break;
     }
 
@@ -148,7 +153,20 @@ void loop() {
   Serial.print("Temperature = ");
   Serial.print(temperature);
   Serial.println("°F");
-  // print an empty line
+  Serial.println();
+
+  // check if a color reading is available
+  while (! APDS.colorAvailable()) {
+    delay(5);
+  }
+  int r, g, b, c;
+
+  // read the color
+  APDS.readColor(r, g, b, c);
+
+  // print the value of c only
+  Serial.print("c = ");
+  Serial.println(c);
   Serial.println();
 
   delay(1000);
