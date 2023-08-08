@@ -31,29 +31,24 @@ bool failed_sensor = false;
 BlindsState currentState = BLINDS_CLOSED;
 OperationMode mode = AUTOMATIC;
 
+constexpr float TEMP_MAX_THRESHOLD = 95; // degrees Fahrenheit
+constexpr float LIGHT_MAX_THRESHOLD = 800; // light intensity (clear channel from ADPS9960)
+
+constexpr float TEMP_MIN_THRESHOLD = 72; // degrees Fahrenheit
+constexpr float LIGHT_MIN_THRESHOLD = 100; // light intensity (clear channel from ADPS9960)
+
 // Functions
 void setup() {
   Serial.begin(SERIAL_SPEED);
-
   while (!Serial);
-
-  pinMode(LEDR, OUTPUT);
-  pinMode(LEDG, OUTPUT);
-  pinMode(LEDB, OUTPUT);
-  pinMode(LED, OUTPUT);
-
-  digitalWrite(LED, LOW);
-  digitalWrite(LEDR, HIGH);
-  digitalWrite(LEDG, HIGH);
-  digitalWrite(LEDB, HIGH);
-
-  if (!APDS.begin()) {
-    Serial.println("Failed to initialize APDS9960 sensor!");
-    failed_sensor = true;
-  }
 
   if (!BARO.begin()) {
     Serial.println("Failed to initialize pressure sensor!");
+    failed_sensor = true;
+  }
+
+  if (!APDS.begin()) {
+    Serial.println("Failed to initialize APDS9960 sensor!");
     failed_sensor = true;
   }
 
@@ -71,6 +66,16 @@ void setup() {
     Serial.println("All sensors ready to go...");
   }
 
+  pinMode(LEDR, OUTPUT);
+  pinMode(LEDG, OUTPUT);
+  pinMode(LEDB, OUTPUT);
+  pinMode(LED, OUTPUT);
+
+  digitalWrite(LED, LOW);
+  digitalWrite(LEDR, HIGH);
+  digitalWrite(LEDG, HIGH);
+  digitalWrite(LEDB, HIGH);
+
   BLE.setLocalName("Nano 33 BLE Sense: Blinds");
   BLE.setAdvertisedService(blindsService);
 
@@ -84,12 +89,49 @@ void setup() {
 
 void loop() {
 
+  // for some weird reason, temperature reads 0 when barometer pressure sensor is not read from?
+  float pressure = BARO.readPressure();
+
+  // this also affects temperature reading? Was reading temp of 95F when room temp is only 79-83. 
+  float altitude = 44330 * ( 1 - pow(pressure/101.325, 1/5.255) );
+
+  // print the sensor value
+  Serial.print("Altitude according to kPa is = ");
+  Serial.print(altitude);
+  Serial.println(" m");
+
+  //getting temp from sensor
+  float temperature = (BARO.readTemperature() * 9) / 5 + 32;
+  int r, g, b, c;
+  
+  Serial.print("Temperature = ");
+  Serial.print(temperature);
+  Serial.println("°F");
+  Serial.println();
+
+  // check if a color reading is available
+  while (! APDS.colorAvailable()) {
+    delay(5);
+  }
+
+  // read the color
+  APDS.readColor(r, g, b, c);
+
+  // print the value of c only
+  Serial.print("c = ");
+  Serial.println(c);
+  Serial.println();
+
   BLEDevice central = BLE.central();
 
   if(central) {
     Serial.print("Connected: ");
     Serial.println(central.address());
+
     digitalWrite(LED, HIGH);
+    digitalWrite(LEDR, LOW);
+    digitalWrite(LEDG, HIGH);
+    digitalWrite(LEDB, HIGH);
 
     mode = MANUAL;
 
@@ -100,10 +142,16 @@ void loop() {
         switch(switchCharacteristic.value()) {
           // case 1 (open), case 2 (close), default
           case 01:
-            openBlinds();
+            if (currentState == BLINDS_CLOSED)
+            {
+              openBlinds();
+            }
             break;
           case 02:
-            closeBlinds();
+            if (currentState == BLINDS_OPEN)
+            {
+              closeBlinds();
+            }
             break;
           default:
             Serial.println("Ignored input.");
@@ -121,22 +169,34 @@ void loop() {
   }
 
   if(mode == AUTOMATIC) {
+    digitalWrite(LEDR, HIGH);
+    digitalWrite(LEDG, HIGH);
+    digitalWrite(LEDB, LOW);
+
     Serial.println("Running in Automatic control mode");
 
     switch(currentState) {
       case BLINDS_CLOSED:
         Serial.println("Blinds are currently closed");
+        if (temperature < TEMP_MIN_THRESHOLD)
+        {
+          openBlinds();
+        }
+        if (c < LIGHT_MIN_THRESHOLD)
+        {
+          openBlinds();
+        }
         break;
       case BLINDS_OPEN:
         Serial.println("Blinds are currently open");
         
         //closing blinds if temp is above 80
-        if(temperature > 80){
+        if (temperature > TEMP_MAX_THRESHOLD){
         closeBlinds();
         Serial.println("Temperature above 80°F, closing blinds");
         }
         //closing blinds if clear light is above 800 
-        if(c > 800){
+        if (c > LIGHT_MAX_THRESHOLD){
           closeBlinds();
           Serial.println("Too bright outside, closing blinds");
         }
@@ -144,30 +204,6 @@ void loop() {
     }
 
   }
-  //getting temp from sensor
-  float temperature = BARO.readTemperature();
-
-  //converting temp to fahrenheit
-  temperature = (temperature * 9/5) + 32;
-
-  Serial.print("Temperature = ");
-  Serial.print(temperature);
-  Serial.println("°F");
-  Serial.println();
-
-  // check if a color reading is available
-  while (! APDS.colorAvailable()) {
-    delay(5);
-  }
-  int r, g, b, c;
-
-  // read the color
-  APDS.readColor(r, g, b, c);
-
-  // print the value of c only
-  Serial.print("c = ");
-  Serial.println(c);
-  Serial.println();
 
   delay(1000);
 }
