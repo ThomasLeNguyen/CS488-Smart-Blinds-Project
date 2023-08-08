@@ -31,11 +31,11 @@ bool failed_sensor = false;
 BlindsState currentState = BLINDS_CLOSED;
 OperationMode mode = AUTOMATIC;
 
-constexpr float TEMP_MAX_THRESHOLD = 95; // degrees Fahrenheit
+constexpr float TEMP_MAX_THRESHOLD = 90; // degrees Fahrenheit
 constexpr float LIGHT_MAX_THRESHOLD = 800; // light intensity (clear channel from ADPS9960)
 
-constexpr float TEMP_MIN_THRESHOLD = 72; // degrees Fahrenheit
-constexpr float LIGHT_MIN_THRESHOLD = 100; // light intensity (clear channel from ADPS9960)
+constexpr float TEMP_MIN_THRESHOLD = 75; // degrees Fahrenheit
+constexpr float LIGHT_MIN_THRESHOLD = 200; // light intensity (clear channel from ADPS9960)
 
 // Functions
 void setup() {
