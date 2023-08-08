@@ -8,6 +8,8 @@
 #include <Arduino_LPS22HB.h>   // temperature sensor
 #include <Stepper.h>           // for stepper control
 
+bool blinds = false;
+
 const int stepsPerRevolution = 1000;
 
 Stepper myStepper(stepsPerRevolution, 12, 11, 10, 9);
@@ -32,7 +34,7 @@ const int LED = LED_BUILTIN;
 
 bool failed_sensor = false;
 
-BlindsState currentState = BLINDS_CLOSED;
+BlindsState currentState = BLINDS_OPEN;
 OperationMode mode = AUTOMATIC;
 
 // Functions
@@ -136,58 +138,48 @@ void loop() {
         Serial.println("Blinds are currently closed");
         break;
       case BLINDS_OPEN:
-        Serial.println("BLinds are currently open");
+        Serial.println("Blinds are currently open");
         break;
     }
   }
+
   //getting temp from sensor
   float pressure = BARO.readPressure();
   float temperature = BARO.readTemperature();
 
   //converting temp to fahrenheit
-  float calculatedTemp = (temperature * 9 / 5) + 32;
+  temperature = (temperature * 9 / 5) + 32;
 
   Serial.print("Temperature = ");
-  Serial.print(calculatedTemp);
-  Serial.println("°F");
-  // print an empty line
-  Serial.println();
+  Serial.print(temperature);
+  Serial.println("°F\n");
 
+  while (!APDS.colorAvailable()) {
+    delay(5);
+  }
 
-  //closing blinds if temp is above 80
-  if (calculatedTemp > 90 && currentState == BLINDS_OPEN) {
+  int r, g, b, c;
+
+  APDS.readColor(r, g, b, c);
+
+  Serial.print("c = ");
+  Serial.println(c);
+
+  if (c > 800 && !blinds) {
+    Serial.println("Too bright, closing blinds");
     closeBlinds();
-    Serial.println("Temperature above 90°F, closing blinds");
-  }
-
-  if (calculatedTemp <= 90 && currentState == BLINDS_CLOSED) {
+    blinds = true;
+  } else if (temperature > 93 && currentState == BLINDS_OPEN) {
+    Serial.println("Temperature above 93°F, closing blinds");
+    closeBlinds();
+  } else if (temperature <= 93 && currentState == BLINDS_CLOSED) {
+    Serial.println("Temperature below 93°F, opening blinds");
     openBlinds();
-    Serial.println("Temperature below 90°F, opening blinds");
+  } else if (c <= 800 && blinds) {
+    Serial.println("Not bright, opening blinds");
+    openBlinds();
+    blinds = false;
   }
-
-  // while (!APDS.colorAvailable()) {
-  //   delay(5);
-  // }
-
-  // int r, g, b, c;
-
-  // // read the color
-  // APDS.readColor(r, g, b, c);
-
-  // // print the value of c only
-  // Serial.print("c = ");
-  // Serial.println(c);
-  // Serial.println();
-
-  // if (c > 800 && currentState == BLINDS_OPEN) {
-  //   closeBlinds();
-  //   Serial.println("Too bright outside, closing blinds");
-  // }
-
-  // if (c <= 800 && currentState == BLINDS_CLOSED) {
-  //   openBlinds();
-  //   Serial.println("Not bright outside, opening blinds");
-  // }
 
   delay(1000);
 }
