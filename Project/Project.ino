@@ -10,7 +10,7 @@
 
 bool blinds = false;
 
-const int stepsPerRevolution = 1000;
+const int stepsPerRevolution = 360;
 
 Stepper myStepper(stepsPerRevolution, 12, 11, 10, 9);
 
@@ -34,7 +34,9 @@ const int LED = LED_BUILTIN;
 
 bool failed_sensor = false;
 
-BlindsState currentState = BLINDS_OPEN;
+bool connected_to_bluetooth = false;
+
+BlindsState currentState = BLINDS_CLOSED;
 OperationMode mode = AUTOMATIC;
 
 // Functions
@@ -93,105 +95,106 @@ void setup() {
 }
 
 void loop() {
-
   BLEDevice central = BLE.central();
 
-  if (central) {
-    Serial.print("Connected: ");
-    Serial.println(central.address());
-    digitalWrite(LED, HIGH);
+  // If bluetooth connected
+  if (central.connected()) {
+    if (connected_to_bluetooth == false) {
+      Serial.print("CONNECTED: ");
+      Serial.println(central.address());
+      digitalWrite(LED, HIGH);
+      connected_to_bluetooth = true;
+    }
 
-    mode = MANUAL;
+    Serial.println("Running in MANUAL control mode! 1 is open, 2 is close.");
 
-    // **** Start BLE logic
-
-    while (central.connected()) {
-      if (switchCharacteristic.written()) {
-        switch (switchCharacteristic.value()) {
-          // case 1 (open), case 2 (close), default
-          case 01:
-            openBlinds();
-            break;
-          case 02:
-            closeBlinds();
-            break;
-          default:
-            Serial.println("Ignored input.");
-            break;
-        }
+    // Checks input
+    if (switchCharacteristic.written()) {
+      Serial.print(switchCharacteristic.value());
+      Serial.println(" was pressed.");
+      if (switchCharacteristic.value() == 1 && currentState == BLINDS_CLOSED) {
+        openBlinds();
+        Serial.println("OPENING blinds.");
+      } else if (switchCharacteristic.value() == 1 && currentState == BLINDS_OPEN) {
+        Serial.println("Sorry blinds are already OPEN.");
+      } else if (switchCharacteristic.value() == 2 && currentState == BLINDS_OPEN) {
+        closeBlinds();
+        Serial.println("CLOSING blinds.");
+      } else if (switchCharacteristic.value() == 2 && currentState == BLINDS_CLOSED) {
+        Serial.println("Sorry blinds are already CLOSED.");
+      } else {
+        Serial.println("Invalid input!");
       }
     }
 
-    // **** On Disconnection
-
-    Serial.println("Disconnected...");
     digitalWrite(LED, LOW);
-
-    mode = AUTOMATIC;
   }
 
-  if (mode == AUTOMATIC) {
-    Serial.println("Running in Automatic control mode");
+  // If not bluetooth connected
+  if (!central) {
+    if (connected_to_bluetooth == true) {
+      Serial.println("DISCONNECTED");
+      digitalWrite(LED, HIGH);
+      connected_to_bluetooth = false;
+    }
 
-    switch (currentState) {
-      case BLINDS_CLOSED:
-        Serial.println("Blinds are currently closed");
-        break;
-      case BLINDS_OPEN:
-        Serial.println("Blinds are currently open");
-        break;
+    Serial.println("Running in AUTOMATIC control mode!");
+
+    float pressure = BARO.readPressure();
+    float temperature = BARO.readTemperature();
+
+    temperature = (temperature * 9 / 5) + 32;
+
+    // Prints temperature
+    Serial.print("Temperature = ");
+    Serial.print(temperature);
+    Serial.println("°F");
+
+    while (!APDS.colorAvailable()) {
+      delay(5);
+    }
+
+    int r, g, b, c;
+
+    APDS.readColor(r, g, b, c);
+
+    // Prints light intensity
+    Serial.print("Light intensity = ");
+    Serial.println(c);
+
+    // Checks temperature and light intensity
+    if ((temperature > 93 || c > 800) && currentState == BLINDS_OPEN) {
+      closeBlinds();
+      Serial.println("Temperature above 93°F or light intensity greater than 800, CLOSING blinds");
+    } else if ((temperature > 93 || c > 800) && currentState == BLINDS_CLOSED) {
+      Serial.println("Temperature above 93°F or light intensity greater than 800, sorry blinds are already CLOSED.");
+    } else if ((temperature <= 93 || c <= 800) && currentState == BLINDS_CLOSED) {
+      openBlinds();
+      Serial.println("Temperature below 93°F or light intensity less than 800, OPENING blinds");
+    } else if ((temperature <= 93 || c <= 800) && currentState == BLINDS_OPEN) {
+      Serial.println("Temperature below 93°F or light intensity less than 800, sorry blinds are already OPEN.");
     }
   }
 
-  //getting temp from sensor
-  float pressure = BARO.readPressure();
-  float temperature = BARO.readTemperature();
-
-  //converting temp to fahrenheit
-  temperature = (temperature * 9 / 5) + 32;
-
-  Serial.print("Temperature = ");
-  Serial.print(temperature);
-  Serial.println("°F\n");
-
-  while (!APDS.colorAvailable()) {
-    delay(5);
-  }
-
-  int r, g, b, c;
-
-  APDS.readColor(r, g, b, c);
-
-  Serial.print("c = ");
-  Serial.println(c);
-
-  if (c > 800 && !blinds) {
-    Serial.println("Too bright, closing blinds");
-    closeBlinds();
-    blinds = true;
-  } else if (temperature > 93 && currentState == BLINDS_OPEN) {
-    Serial.println("Temperature above 93°F, closing blinds");
-    closeBlinds();
-  } else if (temperature <= 93 && currentState == BLINDS_CLOSED) {
-    Serial.println("Temperature below 93°F, opening blinds");
-    openBlinds();
-  } else if (c <= 800 && blinds) {
-    Serial.println("Not bright, opening blinds");
-    openBlinds();
-    blinds = false;
-  }
+  // Prints if they are open or closed
+  if (currentState == BLINDS_CLOSED)
+    Serial.println("Blinds are currently closed");
+  else if (currentState == BLINDS_OPEN)
+    Serial.println("Blinds are currently open");
 
   delay(1000);
 }
 
+// Function to open blinds
 void openBlinds() {
-  Serial.println("Opening Blinds....");
-  myStepper.step(-stepsPerRevolution);
+  for (int i = 0; i < 9; i++)
+    myStepper.step(-stepsPerRevolution);
   currentState = BLINDS_OPEN;
 }
 
+// Function to close blinds
 void closeBlinds() {
-  Serial.println("Closing Blinds....");
-  myStepper.step(stepsPerRevolution);
+  for (int i = 0; i < 9; i++)
+    myStepper.step(stepsPerRevolution);
   currentState = BLINDS_CLOSED;
 }
