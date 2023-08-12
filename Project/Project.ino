@@ -163,16 +163,16 @@ void loop() {
     Serial.println(c);
 
     // Checks temperature and light intensity
-    if ((temperature > 93 || c > 800) && currentState == BLINDS_OPEN) {
-      closeBlinds();
-      Serial.println("Temperature above 93°F or light intensity greater than 800, CLOSING blinds");
-    } else if ((temperature > 93 || c > 800) && currentState == BLINDS_CLOSED) {
-      Serial.println("Temperature above 93°F or light intensity greater than 800, sorry blinds are already CLOSED.");
-    } else if ((temperature <= 93 || c <= 800) && currentState == BLINDS_CLOSED) {
+    if ((temperature > 87 || c > 800) && currentState == BLINDS_CLOSED) {
       openBlinds();
-      Serial.println("Temperature below 93°F or light intensity less than 800, OPENING blinds");
-    } else if ((temperature <= 93 || c <= 800) && currentState == BLINDS_OPEN) {
-      Serial.println("Temperature below 93°F or light intensity less than 800, sorry blinds are already OPEN.");
+      Serial.println("Temperature above 93°F or light intensity greater than 800, OPENING blinds");
+    } else if ((temperature > 87 || c > 800) && currentState == BLINDS_OPEN) {
+      Serial.println("Temperature above 93°F or light intensity greater than 800, sorry blinds are already OPEN.");
+    } else if ((temperature <= 87 || c <= 800) && currentState == BLINDS_OPEN) {
+      closeBlinds();
+      Serial.println("Temperature below 93°F or light intensity less than 800, CLOSING blinds");
+    } else if ((temperature <= 87 || c <= 800) && currentState == BLINDS_CLOSED) {
+      Serial.println("Temperature below 93°F or light intensity less than 800, sorry blinds are already CLOSED.");
     }
   }
 
